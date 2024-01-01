@@ -1,5 +1,32 @@
 const CDP = require('chrome-remote-interface')
 const chalk = require('chalk')
+var Promise = require('bluebird');
+
+function afterTest(suite, wrapper) {
+  suite.on('suite', childSuite => {
+    afterTest(childSuite, wrapper);
+  })
+  
+  suite.on('test', test => {
+    if(!test.fn){
+      return;
+    }
+    var originalFn = test.fn;
+    
+    if(originalFn.length > 0) {
+      test.fn = function(done) {
+        wrapper(Promise.fromCallback(done => {
+          return originalFn.call(this, done);
+        })).asCallback(done);
+      };
+    } else {
+      test.fn = function() {
+        return wrapper(Promise.try(() => originalFn.call(this)));
+      };
+    }
+  });
+};
+
 
 let eventFilter
 let recordLogs
@@ -47,12 +74,13 @@ function logEntry(params) {
 
   let logMessage = `${prefix}${chalk.bold(level)} (${source}): ${text}`;
   log(color(logMessage));
-  recordLogMessage(logMessage);
+  // recordLogMessage(logMessage);
+  recordLogMessage(params.entry);
 
   const logAdditional = (msg) => {
     let additionalLogMessage = `${prefixSpacer}${msg}`;
     log(color(additionalLogMessage));
-    recordLogMessage(additionalLogMessage);
+    // recordLogMessage(additionalLogMessage);
   };
 
   if (url) {
@@ -86,12 +114,13 @@ function logConsole(params) {
 
   let logMessage = `${prefix}${chalk.bold(`console.${type}`)} called`;
   log(color(logMessage));
-  recordLogMessage(logMessage);
+  // recordLogMessage(logMessage);
+  recordLogMessage(params);
 
   const logAdditional = (msg) => {
     let logMessage = `${prefixSpacer}${msg}`;
     log(color(logMessage));
-    recordLogMessage(logMessage);
+    // recordLogMessage(logMessage);
   };
 
   if (args) {
@@ -179,6 +208,7 @@ function browserLaunchHandler(browser = {}, launchOptions) {
 }
 
 module.exports = {
+  afterTest,
   _ensureRdpPort: ensureRdpPort,
   install,
   browserLaunchHandler,
